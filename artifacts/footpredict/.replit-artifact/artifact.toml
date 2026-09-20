@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "FootPredict"
+description = "A mobile-friendly football prediction website for searching fixtures and viewing match probabilities, form, probable scores, and confidence insights."
+version = "1.0.0"
+id = "artifacts/footpredict"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 22623
+
+[services.development]
+run = "pnpm --filter @workspace/footpredict run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/footpredict", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/footpredict/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "22623"
+BASE_PATH = "/"
