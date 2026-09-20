@@ -33,8 +33,7 @@ type Result = 'W' | 'D' | 'L';
 type Fixture = {
   id: string;
   league: Exclude<League, 'All'>;
-  date: string;
-  kickoff: string;
+  dateTime: string;
   home: string;
   away: string;
   homeCode: string;
@@ -51,12 +50,66 @@ type Fixture = {
   awayGoals: string;
 };
 
+// The fixture board stays local until a live data source is connected, but its
+// schedule is always generated relative to the day the app is opened. This
+// keeps the product feeling current without introducing a paid API yet.
+function scheduleFromToday(daysFromToday: number, kickoff: string) {
+  const [hours, minutes] = kickoff.split(':').map(Number);
+  const scheduled = new Date();
+  scheduled.setDate(scheduled.getDate() + daysFromToday);
+  scheduled.setHours(hours, minutes, 0, 0);
+  return scheduled.toISOString();
+}
+
+// These formatters intentionally use the viewer's locale and timezone so the
+// matchday desk reads naturally for each person using the app.
+function formatFixtureDate(dateTime: string) {
+  return new Intl.DateTimeFormat(undefined, {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+  }).format(new Date(dateTime));
+}
+
+function formatHeroDate(date: Date) {
+  return new Intl.DateTimeFormat(undefined, {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  }).format(date);
+}
+
+function formatKickoff(dateTime: string) {
+  return new Intl.DateTimeFormat(undefined, {
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(dateTime));
+}
+
+function formatRelativeKickoff(dateTime: string) {
+  const minutesUntilKickoff = Math.round((new Date(dateTime).getTime() - Date.now()) / 60000);
+  const daysUntilKickoff = Math.floor(minutesUntilKickoff / (60 * 24));
+
+  if (minutesUntilKickoff < 0) return 'started';
+  if (daysUntilKickoff === 0) return 'today';
+  if (daysUntilKickoff === 1) return 'tomorrow';
+  return `in ${daysUntilKickoff} days`;
+}
+
+function formatModelUpdated(date: Date) {
+  return new Intl.DateTimeFormat(undefined, {
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZoneName: 'short',
+  }).format(date);
+}
+
 const fixtures: Fixture[] = [
   {
     id: 'bou-liv',
     league: 'Premier League',
-    date: 'Sat 15 Feb',
-    kickoff: '15:00',
+    dateTime: scheduleFromToday(2, '15:00'),
     home: 'Bournemouth',
     away: 'Liverpool',
     homeCode: 'BOU',
@@ -75,8 +128,7 @@ const fixtures: Fixture[] = [
   {
     id: 'ars-ful',
     league: 'Premier League',
-    date: 'Sat 15 Feb',
-    kickoff: '17:30',
+    dateTime: scheduleFromToday(2, '17:30'),
     home: 'Arsenal',
     away: 'Fulham',
     homeCode: 'ARS',
@@ -95,8 +147,7 @@ const fixtures: Fixture[] = [
   {
     id: 'ath-atm',
     league: 'La Liga',
-    date: 'Sun 16 Feb',
-    kickoff: '20:00',
+    dateTime: scheduleFromToday(3, '20:00'),
     home: 'Athletic Club',
     away: 'Atlético Madrid',
     homeCode: 'ATH',
@@ -115,8 +166,7 @@ const fixtures: Fixture[] = [
   {
     id: 'bay-psg',
     league: 'Champions League',
-    date: 'Tue 18 Feb',
-    kickoff: '20:00',
+    dateTime: scheduleFromToday(5, '20:00'),
     home: 'Bayern Munich',
     away: 'Paris Saint-Germain',
     homeCode: 'BAY',
@@ -135,8 +185,7 @@ const fixtures: Fixture[] = [
   {
     id: 'new-eve',
     league: 'Premier League',
-    date: 'Wed 19 Feb',
-    kickoff: '19:45',
+    dateTime: scheduleFromToday(6, '19:45'),
     home: 'Newcastle',
     away: 'Everton',
     homeCode: 'NEW',
@@ -172,8 +221,8 @@ function FixtureItem({ fixture, selected, onSelect }: { fixture: Fixture; select
   return (
     <button className={`fixture-item ${selected ? 'selected' : ''}`} onClick={onSelect} data-testid={`button-fixture-${fixture.id}`}>
       <div className="fixture-meta">
-        <span>{fixture.league}</span>
-        <span className="fixture-status">{fixture.kickoff}</span>
+        <span>{fixture.league} · {formatFixtureDate(fixture.dateTime)}</span>
+        <span className="fixture-status">{formatKickoff(fixture.dateTime)}</span>
       </div>
       <div className="fixture-teams">
         <div className="fixture-team"><span className="mini-crest">{fixture.homeCode.slice(0, 2)}</span>{fixture.home}</div>
@@ -203,7 +252,7 @@ function MatchHero({ fixture, pinned, onPin, onAnalysis }: { fixture: Fixture; p
   return (
     <section className="match-card" data-testid={`card-selected-match-${fixture.id}`}>
       <div className="match-card-head">
-        <span>{fixture.league} <span aria-hidden="true">·</span> {fixture.date}</span>
+        <span>{fixture.league} <span aria-hidden="true">·</span> {formatFixtureDate(fixture.dateTime)}</span>
         <div className="match-card-tools">
           <span className="live-label"><span className="status-dot" /> model ready</span>
           <button className={`icon-button ${pinned ? 'active' : ''}`} onClick={onPin} aria-label={pinned ? 'Unpin match' : 'Pin match'} data-testid="button-pin-match">
@@ -218,9 +267,9 @@ function MatchHero({ fixture, pinned, onPin, onAnalysis }: { fixture: Fixture; p
           <div className="team-formline">home · {fixture.homeGoals} xG</div>
         </div>
         <div className="versus">
-          <span>{fixture.kickoff}</span>
+          <span>{formatKickoff(fixture.dateTime)}</span>
           <strong>vs</strong>
-          <span>in {fixture.home === 'Bournemouth' ? '3 days' : '6 days'}</span>
+          <span>{formatRelativeKickoff(fixture.dateTime)}</span>
         </div>
         <div className="team-block">
           <div className="team-crest">{fixture.awayCode}</div>
@@ -372,7 +421,7 @@ function Home() {
   const [tab, setTab] = useState<Tab>('overview');
   const [pinned, setPinned] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [lastUpdated, setLastUpdated] = useState('08:42 UTC');
+  const [lastUpdated, setLastUpdated] = useState(() => formatModelUpdated(new Date()));
 
   const filteredFixtures = useMemo(() => {
     const term = query.trim().toLowerCase();
@@ -394,7 +443,7 @@ function Home() {
     setRefreshing(true);
     window.setTimeout(() => {
       setRefreshing(false);
-      setLastUpdated('just now');
+      setLastUpdated(formatModelUpdated(new Date()));
     }, 700);
   }
 
@@ -416,7 +465,7 @@ function Home() {
       <main className="page-wrap">
         <section className="hero">
           <div>
-            <p className="eyebrow">Saturday, 15 February 2025 / matchday desk</p>
+            <p className="eyebrow">{formatHeroDate(new Date())} / matchday desk</p>
             <h1>Read the game<br /><em>before it starts.</em></h1>
             <p className="hero-copy">A focused pre-match read for the fixtures that matter. Find a game, see the signal, and know what is driving the numbers.</p>
           </div>
