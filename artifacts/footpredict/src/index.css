@@ -264,6 +264,10 @@
   background: hsl(var(--chart-2));
   animation: pulse-dot 2.2s ease-in-out infinite;
 }
+.status-dot.demo {
+  background: hsl(var(--primary));
+  animation: none;
+}
 .hero {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 310px;
@@ -322,6 +326,12 @@
   margin-top: 10px;
   font-size: 14px;
   font-weight: 500;
+}
+.data-status-note {
+  margin: 6px 0 0;
+  color: hsl(var(--muted-foreground));
+  font-size: 11px;
+  line-height: 1.45;
 }
 .model-line {
   position: relative;
@@ -516,6 +526,12 @@
   font-size: 9px;
   letter-spacing: 0.04em;
   text-transform: uppercase;
+}
+.fixture-meta > span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .fixture-status {
   color: hsl(var(--chart-2));
@@ -868,6 +884,51 @@
   gap: 13px;
   margin-top: 13px;
 }
+.data-unavailable {
+  display: grid;
+  gap: 7px;
+  min-height: 78px;
+  align-content: center;
+  padding: 11px 12px;
+  border: 1px dashed hsl(var(--border));
+  border-radius: 9px;
+  color: hsl(var(--muted-foreground));
+  font-size: 11px;
+  line-height: 1.45;
+}
+.data-unavailable strong {
+  color: hsl(var(--foreground));
+  font-size: 12px;
+}
+.goals-signals-card {
+  margin-top: 13px;
+}
+.signal-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 9px;
+}
+.signal-grid > div {
+  display: grid;
+  gap: 7px;
+  padding: 11px;
+  border: 1px solid hsl(var(--border));
+  border-radius: 9px;
+  background: hsl(var(--secondary) / 0.45);
+}
+.signal-grid span {
+  color: hsl(var(--muted-foreground));
+  font-family: var(--app-font-mono);
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.signal-grid strong {
+  color: hsl(var(--foreground));
+  font-family: var(--app-font-mono);
+  font-size: 17px;
+  font-weight: 500;
+}
 .score-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -981,6 +1042,92 @@
   letter-spacing: 0.07em;
   text-transform: uppercase;
 }
+.prediction-card {
+  position: relative;
+  overflow: hidden;
+  margin-top: 13px;
+  padding: 21px;
+  border: 1px solid hsl(var(--primary) / 0.42);
+  border-radius: 14px;
+  background:
+    linear-gradient(115deg, hsl(var(--primary) / 0.12), transparent 62%),
+    hsl(var(--card) / 0.84);
+}
+.prediction-card::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 12%;
+  width: 150px;
+  height: 1px;
+  background: hsl(var(--primary));
+  box-shadow: 0 0 28px 6px hsl(var(--primary) / 0.15);
+}
+.prediction-kicker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: hsl(var(--primary));
+  font-family: var(--app-font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.prediction-marker {
+  width: 7px;
+  height: 7px;
+  border-radius: 99px;
+  background: hsl(var(--primary));
+}
+.prediction-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 20px;
+  margin-top: 18px;
+}
+.prediction-layout h2 {
+  margin: 0;
+  font-size: clamp(21px, 3vw, 29px);
+  letter-spacing: -0.04em;
+}
+.prediction-layout p {
+  max-width: 570px;
+  margin: 7px 0 0;
+  color: hsl(var(--muted-foreground));
+  font-size: 12px;
+  line-height: 1.5;
+}
+.prediction-confidence {
+  display: grid;
+  justify-items: end;
+  gap: 3px;
+}
+.prediction-confidence span {
+  color: hsl(var(--muted-foreground));
+  font-family: var(--app-font-mono);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.prediction-confidence strong {
+  color: hsl(var(--primary));
+  font-family: var(--app-font-mono);
+  font-size: 25px;
+  font-weight: 500;
+}
+.prediction-confidence.unavailable strong {
+  color: hsl(var(--muted-foreground));
+}
+.prediction-footnote {
+  margin: 17px 0 0;
+  padding-top: 12px;
+  border-top: 1px solid hsl(var(--border));
+  color: hsl(var(--muted-foreground));
+  font-family: var(--app-font-mono);
+  font-size: 9px;
+  line-height: 1.45;
+}
 .empty-state {
   display: grid;
   min-height: 260px;
@@ -1049,6 +1196,9 @@
   .metric-card { display: flex; align-items: center; justify-content: space-between; }
   .metric-value { margin-top: 0; }
   .two-column { grid-template-columns: 1fr; }
+  .prediction-layout { grid-template-columns: 1fr; gap: 12px; }
+  .prediction-confidence { justify-items: start; grid-template-columns: auto auto; align-items: baseline; gap: 9px; }
+  .signal-grid { grid-template-columns: 1fr; }
   .analysis-header { align-items: flex-start; flex-direction: column; gap: 8px; }
   .analysis-header p { text-align: left; }
   .confidence-card { grid-template-columns: auto 1fr; }

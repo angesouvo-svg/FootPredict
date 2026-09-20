@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
   Activity,
+  AlertTriangle,
   BarChart3,
   CalendarDays,
   Check,
@@ -25,183 +26,20 @@ import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import NotFound from '@/pages/not-found';
 import { Link, Route, Switch, Router as WouterRouter, useLocation } from 'wouter';
+import {
+  createFootballDataProvider,
+  formatFixtureDate,
+  formatHeroDate,
+  formatKickoff,
+  formatModelUpdated,
+  formatRelativeKickoff,
+  type Fixture,
+  type League,
+  type ProviderStatus,
+  type Result,
+} from '@/data/football-provider';
 
 type Tab = 'overview' | 'analysis';
-type League = 'All' | 'Premier League' | 'La Liga' | 'Champions League';
-type Result = 'W' | 'D' | 'L';
-
-type Fixture = {
-  id: string;
-  league: Exclude<League, 'All'>;
-  dateTime: string;
-  home: string;
-  away: string;
-  homeCode: string;
-  awayCode: string;
-  homeForm: Result[];
-  awayForm: Result[];
-  insight: string;
-  confidence: number;
-  oneXtwo: { home: number; draw: number; away: number };
-  overUnder: { over15: number; over25: number; under35: number };
-  btts: { yes: number; no: number };
-  scores: Array<{ score: string; probability: number }>;
-  homeGoals: string;
-  awayGoals: string;
-};
-
-// The fixture board stays local until a live data source is connected, but its
-// schedule is always generated relative to the day the app is opened. This
-// keeps the product feeling current without introducing a paid API yet.
-function scheduleFromToday(daysFromToday: number, kickoff: string) {
-  const [hours, minutes] = kickoff.split(':').map(Number);
-  const scheduled = new Date();
-  scheduled.setDate(scheduled.getDate() + daysFromToday);
-  scheduled.setHours(hours, minutes, 0, 0);
-  return scheduled.toISOString();
-}
-
-// These formatters intentionally use the viewer's locale and timezone so the
-// matchday desk reads naturally for each person using the app.
-function formatFixtureDate(dateTime: string) {
-  return new Intl.DateTimeFormat(undefined, {
-    weekday: 'short',
-    day: 'numeric',
-    month: 'short',
-  }).format(new Date(dateTime));
-}
-
-function formatHeroDate(date: Date) {
-  return new Intl.DateTimeFormat(undefined, {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  }).format(date);
-}
-
-function formatKickoff(dateTime: string) {
-  return new Intl.DateTimeFormat(undefined, {
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(new Date(dateTime));
-}
-
-function formatRelativeKickoff(dateTime: string) {
-  const minutesUntilKickoff = Math.round((new Date(dateTime).getTime() - Date.now()) / 60000);
-  const daysUntilKickoff = Math.floor(minutesUntilKickoff / (60 * 24));
-
-  if (minutesUntilKickoff < 0) return 'started';
-  if (daysUntilKickoff === 0) return 'today';
-  if (daysUntilKickoff === 1) return 'tomorrow';
-  return `in ${daysUntilKickoff} days`;
-}
-
-function formatModelUpdated(date: Date) {
-  return new Intl.DateTimeFormat(undefined, {
-    hour: '2-digit',
-    minute: '2-digit',
-    timeZoneName: 'short',
-  }).format(date);
-}
-
-const fixtures: Fixture[] = [
-  {
-    id: 'bou-liv',
-    league: 'Premier League',
-    dateTime: scheduleFromToday(2, '15:00'),
-    home: 'Bournemouth',
-    away: 'Liverpool',
-    homeCode: 'BOU',
-    awayCode: 'LIV',
-    homeForm: ['W', 'D', 'L', 'W', 'D'],
-    awayForm: ['W', 'W', 'W', 'D', 'W'],
-    insight: 'Liverpool’s press and chance volume create the clearest edge, but Bournemouth’s home attack keeps both teams live.',
-    confidence: 78,
-    oneXtwo: { home: 18, draw: 21, away: 61 },
-    overUnder: { over15: 82, over25: 64, under35: 68 },
-    btts: { yes: 57, no: 43 },
-    scores: [{ score: '1–2', probability: 15.8 }, { score: '0–2', probability: 12.4 }, { score: '1–1', probability: 10.1 }],
-    homeGoals: '1.24',
-    awayGoals: '2.06',
-  },
-  {
-    id: 'ars-ful',
-    league: 'Premier League',
-    dateTime: scheduleFromToday(2, '17:30'),
-    home: 'Arsenal',
-    away: 'Fulham',
-    homeCode: 'ARS',
-    awayCode: 'FUL',
-    homeForm: ['W', 'W', 'W', 'D', 'W'],
-    awayForm: ['D', 'L', 'W', 'D', 'L'],
-    insight: 'Arsenal’s control in the final third is the dominant signal. Fulham tend to concede territory away from home.',
-    confidence: 84,
-    oneXtwo: { home: 69, draw: 19, away: 12 },
-    overUnder: { over15: 86, over25: 61, under35: 73 },
-    btts: { yes: 42, no: 58 },
-    scores: [{ score: '2–0', probability: 16.4 }, { score: '2–1', probability: 12.7 }, { score: '3–0', probability: 10.9 }],
-    homeGoals: '2.15',
-    awayGoals: '0.76',
-  },
-  {
-    id: 'ath-atm',
-    league: 'La Liga',
-    dateTime: scheduleFromToday(3, '20:00'),
-    home: 'Athletic Club',
-    away: 'Atlético Madrid',
-    homeCode: 'ATH',
-    awayCode: 'ATM',
-    homeForm: ['W', 'W', 'D', 'W', 'L'],
-    awayForm: ['W', 'D', 'W', 'L', 'W'],
-    insight: 'A tight, low-event match profile. Athletic’s home intensity offsets Atlético’s defensive consistency.',
-    confidence: 65,
-    oneXtwo: { home: 36, draw: 32, away: 32 },
-    overUnder: { over15: 70, over25: 39, under35: 84 },
-    btts: { yes: 48, no: 52 },
-    scores: [{ score: '1–1', probability: 15.1 }, { score: '1–0', probability: 12.1 }, { score: '0–1', probability: 10.8 }],
-    homeGoals: '1.12',
-    awayGoals: '1.08',
-  },
-  {
-    id: 'bay-psg',
-    league: 'Champions League',
-    dateTime: scheduleFromToday(5, '20:00'),
-    home: 'Bayern Munich',
-    away: 'Paris Saint-Germain',
-    homeCode: 'BAY',
-    awayCode: 'PSG',
-    homeForm: ['W', 'W', 'L', 'W', 'W'],
-    awayForm: ['W', 'W', 'D', 'W', 'W'],
-    insight: 'Two elite attacks make the goal markets more reliable than the match result. Bayern carry a narrow home advantage.',
-    confidence: 71,
-    oneXtwo: { home: 44, draw: 24, away: 32 },
-    overUnder: { over15: 91, over25: 76, under35: 48 },
-    btts: { yes: 71, no: 29 },
-    scores: [{ score: '2–1', probability: 13.9 }, { score: '2–2', probability: 11.6 }, { score: '3–2', probability: 9.4 }],
-    homeGoals: '1.89',
-    awayGoals: '1.62',
-  },
-  {
-    id: 'new-eve',
-    league: 'Premier League',
-    dateTime: scheduleFromToday(6, '19:45'),
-    home: 'Newcastle',
-    away: 'Everton',
-    homeCode: 'NEW',
-    awayCode: 'EVE',
-    homeForm: ['D', 'W', 'W', 'L', 'W'],
-    awayForm: ['L', 'D', 'L', 'W', 'D'],
-    insight: 'Newcastle’s home tempo should stretch an Everton side that prefers a slower game state.',
-    confidence: 73,
-    oneXtwo: { home: 55, draw: 26, away: 19 },
-    overUnder: { over15: 78, over25: 52, under35: 75 },
-    btts: { yes: 51, no: 49 },
-    scores: [{ score: '2–0', probability: 14.6 }, { score: '2–1', probability: 13.2 }, { score: '1–0', probability: 11.8 }],
-    homeGoals: '1.65',
-    awayGoals: '0.91',
-  },
-];
 
 const queryClient = new QueryClient();
 
@@ -248,13 +86,13 @@ function ProbabilityRows({ rows }: { rows: Array<{ name: string; value: number; 
   );
 }
 
-function MatchHero({ fixture, pinned, onPin, onAnalysis }: { fixture: Fixture; pinned: boolean; onPin: () => void; onAnalysis: () => void }) {
+function MatchHero({ fixture, pinned, dataStatus, onPin, onAnalysis }: { fixture: Fixture; pinned: boolean; dataStatus: ProviderStatus; onPin: () => void; onAnalysis: () => void }) {
   return (
     <section className="match-card" data-testid={`card-selected-match-${fixture.id}`}>
       <div className="match-card-head">
         <span>{fixture.league} <span aria-hidden="true">·</span> {formatFixtureDate(fixture.dateTime)}</span>
         <div className="match-card-tools">
-          <span className="live-label"><span className="status-dot" /> model ready</span>
+          <span className="live-label"><span className={`status-dot ${dataStatus.source === 'demo' ? 'demo' : ''}`} /> {dataStatus.label}</span>
           <button className={`icon-button ${pinned ? 'active' : ''}`} onClick={onPin} aria-label={pinned ? 'Unpin match' : 'Pin match'} data-testid="button-pin-match">
             <Pin size={14} />
           </button>
@@ -352,7 +190,95 @@ function ArrowIcon() {
   return <ChevronRight size={13} />;
 }
 
-function Analysis({ fixture }: { fixture: Fixture }) {
+type PredictionSignal = {
+  label: string;
+  confidence: number;
+  reason: string;
+};
+
+function getStrongestPrediction(fixture: Fixture): PredictionSignal {
+  const candidates: PredictionSignal[] = [
+    {
+      label: `${fixture.home} to win`,
+      confidence: fixture.oneXtwo.home,
+      reason: `${fixture.home} has the highest single-match outcome probability.`,
+    },
+    {
+      label: 'Draw',
+      confidence: fixture.oneXtwo.draw,
+      reason: 'The draw is the strongest single outcome in the 1X2 distribution.',
+    },
+    {
+      label: `${fixture.away} to win`,
+      confidence: fixture.oneXtwo.away,
+      reason: `${fixture.away} has the highest single-match outcome probability.`,
+    },
+    {
+      label: 'Over 1.5 goals',
+      confidence: fixture.overUnder.over15,
+      reason: 'The goal model gives the Over 1.5 line its strongest goal-market probability.',
+    },
+    {
+      label: 'Over 2.5 goals',
+      confidence: fixture.overUnder.over25,
+      reason: 'The goal model gives the Over 2.5 line its strongest goal-market probability.',
+    },
+    {
+      label: 'Under 3.5 goals',
+      confidence: fixture.overUnder.under35,
+      reason: 'The model expects the match to stay below the 3.5 goal line most often.',
+    },
+    {
+      label: 'BTTS: Yes',
+      confidence: fixture.btts.yes,
+      reason: 'Both teams scoring has the stronger side of the BTTS split.',
+    },
+    {
+      label: 'BTTS: No',
+      confidence: fixture.btts.no,
+      reason: 'The no side has the stronger probability in the BTTS split.',
+    },
+  ];
+
+  return candidates.reduce((strongest, candidate) => candidate.confidence > strongest.confidence ? candidate : strongest);
+}
+
+function PredictionSection({ fixture, status }: { fixture: Fixture; status: ProviderStatus }) {
+  const strongestPrediction = getStrongestPrediction(fixture);
+  const hasReliableData = status.reliableForPredictions;
+
+  return (
+    <section className="prediction-card" data-testid="card-prediction" aria-labelledby="prediction-heading">
+      <div className="prediction-kicker"><span className="prediction-marker" /> Prediction</div>
+      {hasReliableData ? (
+        <div className="prediction-layout">
+          <div>
+            <h2 id="prediction-heading">{strongestPrediction.label}</h2>
+            <p>{strongestPrediction.reason}</p>
+          </div>
+          <div className="prediction-confidence">
+            <span>Confidence</span>
+            <strong>{strongestPrediction.confidence}%</strong>
+          </div>
+        </div>
+      ) : (
+        <div className="prediction-layout">
+          <div>
+            <h2 id="prediction-heading">Insufficient data</h2>
+            <p>The current provider is marked {status.label}. A live or verified cached data source is required before FootPredict can issue a statistical prediction.</p>
+          </div>
+          <div className="prediction-confidence unavailable">
+            <span>Confidence</span>
+            <strong>—</strong>
+          </div>
+        </div>
+      )}
+      <p className="prediction-footnote">Predictions are only published when the provider reports reliable statistical inputs.</p>
+    </section>
+  );
+}
+
+function Analysis({ fixture, status }: { fixture: Fixture; status: ProviderStatus }) {
   return (
     <>
       <div className="analysis-header">
@@ -396,6 +322,23 @@ function Analysis({ fixture }: { fixture: Fixture }) {
         </div>
       </div>
       <div className="two-column">
+        <div className="data-card" data-testid="card-double-chance">
+          <div className="card-heading"><div><h3>Double chance</h3><p>Combined 1X2 outcomes</p></div><Check size={16} color="hsl(var(--chart-2))" /></div>
+          <ProbabilityRows rows={[
+            { name: 'Home or draw', value: fixture.oneXtwo.home + fixture.oneXtwo.draw },
+            { name: 'Draw or away', value: fixture.oneXtwo.draw + fixture.oneXtwo.away, tone: 'teal' },
+            { name: 'Home or away', value: fixture.oneXtwo.home + fixture.oneXtwo.away, tone: 'muted' },
+          ]} />
+        </div>
+        <div className="data-card" data-testid="card-asian-handicap">
+          <div className="card-heading"><div><h3>Asian handicap</h3><p>Verified handicap lines only</p></div><AlertTriangle size={16} color="hsl(var(--primary))" /></div>
+          <div className="data-unavailable">
+            <strong>Insufficient data</strong>
+            <span>Handicap lines are not available from the current {status.label.toLowerCase()} provider.</span>
+          </div>
+        </div>
+      </div>
+      <div className="two-column">
         <div className="data-card" data-testid="card-probable-scores">
           <div className="card-heading"><div><h3>Probable scores</h3><p>Most likely exact results</p></div><Target size={16} color="hsl(var(--primary))" /></div>
           <div className="score-grid">
@@ -410,41 +353,94 @@ function Analysis({ fixture }: { fixture: Fixture }) {
           </div>
         </div>
       </div>
+      <div className="data-card goals-signals-card" data-testid="card-goals-signals">
+        <div className="card-heading"><div><h3>Goals-related signals</h3><p>Derived from the available goal model inputs</p></div><BarChart3 size={16} color="hsl(var(--chart-2))" /></div>
+        <div className="signal-grid">
+          <div><span>Expected goals</span><strong>{(Number(fixture.homeGoals) + Number(fixture.awayGoals)).toFixed(2)}</strong></div>
+          <div><span>Over 1.5</span><strong>{fixture.overUnder.over15}%</strong></div>
+          <div><span>BTTS yes</span><strong>{fixture.btts.yes}%</strong></div>
+        </div>
+      </div>
+      <PredictionSection fixture={fixture} status={status} />
     </>
   );
 }
 
 function Home() {
+  const dataProvider = useMemo(() => createFootballDataProvider(), []);
+  const dataStatus = dataProvider.status;
   const [query, setQuery] = useState('');
   const [league, setLeague] = useState<League>('All');
-  const [selectedId, setSelectedId] = useState('bou-liv');
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [filteredFixtures, setFilteredFixtures] = useState<Fixture[]>([]);
+  const [isLoadingData, setIsLoadingData] = useState(true);
+  const [dataError, setDataError] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>('overview');
   const [pinned, setPinned] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [lastUpdated, setLastUpdated] = useState(() => formatModelUpdated(new Date()));
 
-  const filteredFixtures = useMemo(() => {
-    const term = query.trim().toLowerCase();
-    return fixtures.filter((fixture) => {
-      const matchesLeague = league === 'All' || fixture.league === league;
-      const matchesSearch = !term || `${fixture.home} ${fixture.away} ${fixture.league}`.toLowerCase().includes(term);
-      return matchesLeague && matchesSearch;
-    });
-  }, [league, query]);
+  useEffect(() => {
+    let cancelled = false;
+    setIsLoadingData(true);
+    setDataError(null);
 
-  const selectedFixture = filteredFixtures.find((fixture) => fixture.id === selectedId) ?? filteredFixtures[0] ?? fixtures[0];
+    dataProvider.searchFixtures({ query, league })
+      .then((results) => {
+        if (cancelled) return;
+        setFilteredFixtures(results);
+        setSelectedId((currentId) => results.some((fixture) => fixture.id === currentId) ? currentId : results[0]?.id ?? null);
+        setIsLoadingData(false);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setFilteredFixtures([]);
+        setSelectedId(null);
+        setDataError('The football data provider could not be reached.');
+        setIsLoadingData(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [dataProvider, league, query]);
+
+  const selectedFixture = filteredFixtures.find((fixture) => fixture.id === selectedId) ?? null;
 
   function selectFixture(fixture: Fixture) {
     setSelectedId(fixture.id);
     setTab('overview');
   }
 
-  function refreshModel() {
+  function handleSearchChange(value: string) {
+    setQuery(value);
+    setSelectedId(null);
+    setPinned(false);
+    setTab('overview');
+  }
+
+  function handleLeagueChange(value: League) {
+    setLeague(value);
+    setSelectedId(null);
+    setPinned(false);
+    setTab('overview');
+  }
+
+  async function refreshModel() {
     setRefreshing(true);
-    window.setTimeout(() => {
-      setRefreshing(false);
+    setDataError(null);
+
+    try {
+      await dataProvider.refresh();
+      const results = await dataProvider.searchFixtures({ query, league });
+      setFilteredFixtures(results);
+      setSelectedId((currentId) => results.some((fixture) => fixture.id === currentId) ? currentId : results[0]?.id ?? null);
       setLastUpdated(formatModelUpdated(new Date()));
-    }, 700);
+    } catch {
+      setDataError('The football data provider could not be refreshed.');
+    } finally {
+      setRefreshing(false);
+    }
   }
 
   return (
@@ -459,7 +455,7 @@ function Home() {
             <a href="#fixtures" aria-current="page" data-testid="link-fixtures">Fixtures</a>
             <a href="#analysis" data-testid="link-analysis">Analysis</a>
           </nav>
-          <div className="status-chip"><span className="status-dot" /> live model</div>
+          <div className="status-chip"><span className={`status-dot ${dataStatus.source === 'demo' ? 'demo' : ''}`} /> {dataStatus.label}</div>
         </div>
       </header>
       <main className="page-wrap">
@@ -470,8 +466,9 @@ function Home() {
             <p className="hero-copy">A focused pre-match read for the fixtures that matter. Find a game, see the signal, and know what is driving the numbers.</p>
           </div>
           <div className="model-note">
-            <div className="model-note-label"><span>Model status</span><span>v2.4</span></div>
-            <strong>Updated {lastUpdated}</strong>
+            <div className="model-note-label"><span>Data source</span><span>{dataStatus.label}</span></div>
+            <strong>Last updated {lastUpdated}</strong>
+            <p className="data-status-note">{dataStatus.description}</p>
             <div className={`model-line ${refreshing ? 'refreshing' : ''}`} />
           </div>
         </section>
@@ -482,16 +479,16 @@ function Home() {
             <div className="search-row">
               <div className="search-input-wrap">
                 <Search className="search-icon" />
-                <input className="search-input" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search Bournemouth, Liverpool, or a league…" aria-label="Search fixtures" data-testid="input-fixture-search" />
-                {query && <button className="clear-search" onClick={() => setQuery('')} aria-label="Clear search" data-testid="button-clear-search"><X size={14} /></button>}
+                <input className="search-input" type="search" value={query} onChange={(event) => handleSearchChange(event.target.value)} placeholder="Search Leeds United, Arsenal, or a fixture…" aria-label="Search fixtures" data-testid="input-fixture-search" />
+                {query && <button className="clear-search" onClick={() => handleSearchChange('')} aria-label="Clear search" data-testid="button-clear-search"><X size={14} /></button>}
               </div>
-              <button className={`filter-button ${league !== 'All' ? 'active' : ''}`} onClick={() => setLeague(league === 'All' ? 'Premier League' : 'All')} data-testid="button-filter-league">
+              <button className={`filter-button ${league !== 'All' ? 'active' : ''}`} onClick={() => handleLeagueChange(league === 'All' ? 'Premier League' : 'All')} data-testid="button-filter-league">
                 <Filter size={14} /> {league === 'All' ? 'All leagues' : league}
               </button>
             </div>
             <div className="league-filters" aria-label="League filters">
               {(['All', 'Premier League', 'La Liga', 'Champions League'] as League[]).map((item) => (
-                <button className={`league-filter ${league === item ? 'active' : ''}`} key={item} onClick={() => setLeague(item)} data-testid={`button-league-${item.toLowerCase().replaceAll(' ', '-')}`}>
+                <button className={`league-filter ${league === item ? 'active' : ''}`} key={item} onClick={() => handleLeagueChange(item)} data-testid={`button-league-${item.toLowerCase().replaceAll(' ', '-')}`}>
                   {item}
                 </button>
               ))}
@@ -501,15 +498,17 @@ function Home() {
 
         <div className="workspace">
           <aside className="fixture-sidebar" aria-label="Fixture list">
-            <div className="section-label"><span>Upcoming</span><span className="fixture-count">{filteredFixtures.length} matches</span></div>
-            {filteredFixtures.length > 0 ? (
+            <div className="section-label"><span>Upcoming</span><span className="fixture-count">{isLoadingData ? 'updating' : `${filteredFixtures.length} matches`}</span></div>
+            {isLoadingData ? (
+              <div className="sidebar-empty"><strong>Refreshing fixture data</strong>Checking the configured football provider.</div>
+            ) : filteredFixtures.length > 0 ? (
               <div className="fixture-list">
                 {filteredFixtures.map((fixture) => <FixtureItem fixture={fixture} selected={fixture.id === selectedId} onSelect={() => selectFixture(fixture)} key={fixture.id} />)}
               </div>
             ) : (
               <div className="sidebar-empty" data-testid="empty-fixture-list">
-                <strong>No fixtures found</strong>
-                Try another team, league, or clear the search.
+                <strong>No current fixture data</strong>
+                {query ? `The configured provider has no data for “${query}”.` : 'There are no fixtures available for this league filter.'}
               </div>
             )}
           </aside>
@@ -520,16 +519,27 @@ function Home() {
               <button className={`detail-tab ${tab === 'analysis' ? 'active' : ''}`} onClick={() => setTab('analysis')} role="tab" aria-selected={tab === 'analysis'} data-testid="tab-analysis">Full analysis</button>
               <button className="detail-tab" onClick={refreshModel} role="button" data-testid="button-refresh-model"><RefreshCw size={13} className={refreshing ? 'refreshing' : ''} /> Refresh</button>
             </div>
-            {filteredFixtures.length === 0 ? (
+            {isLoadingData ? (
+              <div className="empty-state" data-testid="loading-analysis">
+                <Clock3 size={24} />
+                <div><h2>Loading fixture data</h2><p>Reading the current configured football provider.</p></div>
+              </div>
+            ) : dataError ? (
+              <div className="empty-state" data-testid="data-error">
+                <AlertTriangle size={24} />
+                <div><h2>Data provider unavailable</h2><p>{dataError}</p></div>
+                <button className="subtle-button" onClick={refreshModel} data-testid="button-retry-data">Try again</button>
+              </div>
+            ) : !selectedFixture ? (
               <div className="empty-state" data-testid="empty-analysis">
                 <Search size={24} />
-                <div><h2>Nothing matches that search</h2><p>FootPredict has a small, curated fixture board. Try “Bournemouth” or switch back to all leagues.</p></div>
-                <button className="subtle-button" onClick={() => { setQuery(''); setLeague('All'); }} data-testid="button-reset-search">Reset fixture search</button>
+                <div><h2>No current fixture data</h2><p>{query ? `No ${dataStatus.label.toLowerCase()} fixture data is available for “${query}”. A live provider can be connected later without changing this interface.` : 'Choose a team, league, or fixture to begin.'}</p></div>
+                <button className="subtle-button" onClick={() => { handleSearchChange(''); handleLeagueChange('All'); }} data-testid="button-reset-search">Reset fixture search</button>
               </div>
             ) : (
               <>
-                <MatchHero fixture={selectedFixture} pinned={pinned} onPin={() => setPinned(!pinned)} onAnalysis={() => setTab('analysis')} />
-                {tab === 'overview' ? <Overview fixture={selectedFixture} onAnalysis={() => setTab('analysis')} /> : <Analysis fixture={selectedFixture} />}
+                <MatchHero fixture={selectedFixture} pinned={pinned} dataStatus={dataStatus} onPin={() => setPinned(!pinned)} onAnalysis={() => setTab('analysis')} />
+                {tab === 'overview' ? <Overview fixture={selectedFixture} onAnalysis={() => setTab('analysis')} /> : <Analysis fixture={selectedFixture} status={dataStatus} />}
               </>
             )}
           </section>
