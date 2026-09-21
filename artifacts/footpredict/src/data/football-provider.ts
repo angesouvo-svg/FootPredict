@@ -1,27 +1,79 @@
 export const FOOTBALL_DATA_TIME_ZONE = 'Africa/Douala';
 
-export type League = 'All' | 'Premier League' | 'La Liga' | 'Champions League';
+export type League = 'All' | 'Premier League' | 'La Liga' | 'Champions League' | 'Bundesliga' | 'Serie A' | 'Ligue 1';
 export type Result = 'W' | 'D' | 'L';
-export type DataSource = 'live' | 'cached' | 'demo';
+export type DataSource = 'live' | 'cached' | 'unavailable';
+
+export type Probability = number | null;
+
+export type TeamStats = {
+  matches: number;
+  form: Result[];
+  goalsFor: number | null;
+  goalsAgainst: number | null;
+  averageGoalsFor: number | null;
+  averageGoalsAgainst: number | null;
+  over15: Probability;
+  over25: Probability;
+  under35: Probability;
+  btts: { yes: Probability; no: Probability };
+  cleanSheets: Probability;
+};
+
+export type StandingsEntry = {
+  position: number;
+  points: number;
+  played: number;
+  goalDifference: number;
+};
+
+export type H2HMatch = {
+  dateTime: string;
+  home: string;
+  away: string;
+  score: string;
+};
+
+export type PredictionMarket = {
+  label: string;
+  probability: number;
+  market: string;
+};
+
+export type MatchAnalysis = {
+  homeStats: TeamStats;
+  awayStats: TeamStats;
+  homeVenueStats: TeamStats;
+  awayVenueStats: TeamStats;
+  oneXtwo: { home: Probability; draw: Probability; away: Probability };
+  doubleChance: { homeOrDraw: Probability; drawOrAway: Probability; homeOrAway: Probability };
+  overUnder: { over15: Probability; over25: Probability; under35: Probability };
+  btts: { yes: Probability; no: Probability };
+  scores: Array<{ score: string; probability: number }>;
+  expectedGoals: { home: Probability; away: Probability };
+  standings: { home: StandingsEntry | null; away: StandingsEntry | null };
+  headToHead: H2HMatch[];
+  injuries: { available: false; reason: string };
+  primaryPrediction: PredictionMarket | null;
+  secondaryMarkets: PredictionMarket[];
+  confidence: Probability;
+  insight: string;
+  unavailable: string[];
+};
 
 export type Fixture = {
   id: string;
   league: Exclude<League, 'All'>;
   dateTime: string;
+  status: string;
   home: string;
   away: string;
   homeCode: string;
   awayCode: string;
-  homeForm: Result[];
-  awayForm: Result[];
-  insight: string;
-  confidence: number;
-  oneXtwo: { home: number; draw: number; away: number };
-  overUnder: { over15: number; over25: number; under35: number };
-  btts: { yes: number; no: number };
-  scores: Array<{ score: string; probability: number }>;
-  homeGoals: string;
-  awayGoals: string;
+  homeTeamId: number;
+  awayTeamId: number;
+  competitionCode: string;
+  analysis: MatchAnalysis | null;
 };
 
 export type ProviderStatus = {
@@ -36,43 +88,20 @@ export type FixtureQuery = {
   league: League;
 };
 
+type ApiEnvelope = {
+  source: DataSource;
+  label: string;
+  description: string;
+  lastUpdated: string | null;
+  fixtures: Fixture[];
+  error?: string;
+};
+
 export interface FootballDataProvider {
   readonly status: ProviderStatus;
-  searchFixtures(query: FixtureQuery): Promise<Fixture[]>;
+  searchFixtures(query: FixtureQuery): Promise<{ status: ProviderStatus; lastUpdated: string | null; fixtures: Fixture[]; error?: string }>;
+  getFixtureAnalysis(fixtureId: string): Promise<{ status: ProviderStatus; fixture: Fixture | null; error?: string }>;
   refresh(): Promise<void>;
-}
-
-// All displayed schedule timestamps are generated from the current calendar
-// date in Cameroon, not from a historical demo date. Douala uses UTC+01:00.
-function scheduleFromToday(daysFromToday: number, kickoff: string) {
-  const [hours, minutes] = kickoff.split(':').map(Number);
-  const currentDoualaDate = getDoualaDateParts(new Date());
-  const utcTimestamp = Date.UTC(
-    currentDoualaDate.year,
-    currentDoualaDate.month - 1,
-    currentDoualaDate.day + daysFromToday,
-    hours - 1,
-    minutes,
-    0,
-    0,
-  );
-
-  return new Date(utcTimestamp).toISOString();
-}
-
-function getDoualaDateParts(date: Date) {
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: FOOTBALL_DATA_TIME_ZONE,
-    year: 'numeric',
-    month: 'numeric',
-    day: 'numeric',
-  }).formatToParts(date);
-
-  return {
-    year: Number(parts.find((part) => part.type === 'year')?.value),
-    month: Number(parts.find((part) => part.type === 'month')?.value),
-    day: Number(parts.find((part) => part.type === 'day')?.value),
-  };
 }
 
 function normalizeSearchTerm(value: string) {
@@ -85,137 +114,89 @@ function normalizeSearchTerm(value: string) {
     .trim();
 }
 
-function createDemoFixtures(): Fixture[] {
-  return [
-    {
-      id: 'bou-liv',
-      league: 'Premier League',
-      dateTime: scheduleFromToday(2, '15:00'),
-      home: 'Bournemouth',
-      away: 'Liverpool',
-      homeCode: 'BOU',
-      awayCode: 'LIV',
-      homeForm: ['W', 'D', 'L', 'W', 'D'],
-      awayForm: ['W', 'W', 'W', 'D', 'W'],
-      insight: 'Liverpool’s press and chance volume create the clearest edge, but Bournemouth’s home attack keeps both teams live.',
-      confidence: 78,
-      oneXtwo: { home: 18, draw: 21, away: 61 },
-      overUnder: { over15: 82, over25: 64, under35: 68 },
-      btts: { yes: 57, no: 43 },
-      scores: [{ score: '1–2', probability: 15.8 }, { score: '0–2', probability: 12.4 }, { score: '1–1', probability: 10.1 }],
-      homeGoals: '1.24',
-      awayGoals: '2.06',
-    },
-    {
-      id: 'ars-ful',
-      league: 'Premier League',
-      dateTime: scheduleFromToday(2, '17:30'),
-      home: 'Arsenal',
-      away: 'Fulham',
-      homeCode: 'ARS',
-      awayCode: 'FUL',
-      homeForm: ['W', 'W', 'W', 'D', 'W'],
-      awayForm: ['D', 'L', 'W', 'D', 'L'],
-      insight: 'Arsenal’s control in the final third is the dominant signal. Fulham tend to concede territory away from home.',
-      confidence: 84,
-      oneXtwo: { home: 69, draw: 19, away: 12 },
-      overUnder: { over15: 86, over25: 61, under35: 73 },
-      btts: { yes: 42, no: 58 },
-      scores: [{ score: '2–0', probability: 16.4 }, { score: '2–1', probability: 12.7 }, { score: '3–0', probability: 10.9 }],
-      homeGoals: '2.15',
-      awayGoals: '0.76',
-    },
-    {
-      id: 'ath-atm',
-      league: 'La Liga',
-      dateTime: scheduleFromToday(3, '20:00'),
-      home: 'Athletic Club',
-      away: 'Atlético Madrid',
-      homeCode: 'ATH',
-      awayCode: 'ATM',
-      homeForm: ['W', 'W', 'D', 'W', 'L'],
-      awayForm: ['W', 'D', 'W', 'L', 'W'],
-      insight: 'A tight, low-event match profile. Athletic’s home intensity offsets Atlético’s defensive consistency.',
-      confidence: 65,
-      oneXtwo: { home: 36, draw: 32, away: 32 },
-      overUnder: { over15: 70, over25: 39, under35: 84 },
-      btts: { yes: 48, no: 52 },
-      scores: [{ score: '1–1', probability: 15.1 }, { score: '1–0', probability: 12.1 }, { score: '0–1', probability: 10.8 }],
-      homeGoals: '1.12',
-      awayGoals: '1.08',
-    },
-    {
-      id: 'bay-psg',
-      league: 'Champions League',
-      dateTime: scheduleFromToday(5, '20:00'),
-      home: 'Bayern Munich',
-      away: 'Paris Saint-Germain',
-      homeCode: 'BAY',
-      awayCode: 'PSG',
-      homeForm: ['W', 'W', 'L', 'W', 'W'],
-      awayForm: ['W', 'W', 'D', 'W', 'W'],
-      insight: 'Two elite attacks make the goal markets more reliable than the match result. Bayern carry a narrow home advantage.',
-      confidence: 71,
-      oneXtwo: { home: 44, draw: 24, away: 32 },
-      overUnder: { over15: 91, over25: 76, under35: 48 },
-      btts: { yes: 71, no: 29 },
-      scores: [{ score: '2–1', probability: 13.9 }, { score: '2–2', probability: 11.6 }, { score: '3–2', probability: 9.4 }],
-      homeGoals: '1.89',
-      awayGoals: '1.62',
-    },
-    {
-      id: 'new-eve',
-      league: 'Premier League',
-      dateTime: scheduleFromToday(6, '19:45'),
-      home: 'Newcastle',
-      away: 'Everton',
-      homeCode: 'NEW',
-      awayCode: 'EVE',
-      homeForm: ['D', 'W', 'W', 'L', 'W'],
-      awayForm: ['L', 'D', 'L', 'W', 'D'],
-      insight: 'Newcastle’s home tempo should stretch an Everton side that prefers a slower game state.',
-      confidence: 73,
-      oneXtwo: { home: 55, draw: 26, away: 19 },
-      overUnder: { over15: 78, over25: 52, under35: 75 },
-      btts: { yes: 51, no: 49 },
-      scores: [{ score: '2–0', probability: 14.6 }, { score: '2–1', probability: 13.2 }, { score: '1–0', probability: 11.8 }],
-      homeGoals: '1.65',
-      awayGoals: '0.91',
-    },
-  ];
+function getInitialStatus(): ProviderStatus {
+  return {
+    source: 'live',
+    label: 'LIVE DATA',
+    description: 'Fixtures and match data are served from football-data.org.',
+    reliableForPredictions: true,
+  };
 }
 
-class DemoFootballDataProvider implements FootballDataProvider {
-  readonly status: ProviderStatus = {
-    source: 'demo',
-    label: 'DEMO DATA',
-    description: 'Local sample fixtures only. No live football provider is connected.',
+function unavailableStatus(): ProviderStatus {
+  return {
+    source: 'unavailable',
+    label: 'DATA SOURCE UNAVAILABLE',
+    description: 'The live football provider is not configured or cannot be reached.',
     reliableForPredictions: false,
   };
+}
 
-  private fixtures = createDemoFixtures();
+function cachedStatus(): ProviderStatus {
+  return {
+    source: 'cached',
+    label: 'CACHED DATA',
+    description: 'Showing recently verified football data while the live provider is unavailable.',
+    reliableForPredictions: true,
+  };
+}
+
+class FootballApiDataProvider implements FootballDataProvider {
+  private lastStatus = getInitialStatus();
+
+  get status() {
+    return this.lastStatus;
+  }
 
   async searchFixtures({ query, league }: FixtureQuery) {
-    const terms = normalizeSearchTerm(query).split(' ').filter(Boolean);
+    const params = new URLSearchParams({ query, league });
+    const response = await fetch(`/api/football/fixtures?${params.toString()}`, { headers: { Accept: 'application/json' } });
+    const envelope = (await response.json()) as ApiEnvelope;
+    this.lastStatus = {
+      source: envelope.source,
+      label: envelope.label,
+      description: envelope.description,
+      reliableForPredictions: envelope.source !== 'unavailable',
+    };
 
-    return this.fixtures.filter((fixture) => {
-      const searchableText = normalizeSearchTerm(`${fixture.home} ${fixture.away} ${fixture.league}`);
-      const matchesLeague = league === 'All' || fixture.league === league;
-      const matchesSearch = terms.length === 0 || terms.every((term) => searchableText.includes(term));
-      return matchesLeague && matchesSearch;
+    if (!response.ok) {
+      throw new Error(envelope.error ?? this.lastStatus.description);
+    }
+
+    return {
+      status: this.lastStatus,
+      lastUpdated: envelope.lastUpdated,
+      fixtures: envelope.fixtures,
+      error: envelope.error,
+    };
+  }
+
+  async getFixtureAnalysis(fixtureId: string) {
+    const response = await fetch(`/api/football/fixtures/${encodeURIComponent(fixtureId)}`, {
+      headers: { Accept: 'application/json' },
     });
+    const envelope = (await response.json()) as { source: DataSource; label: string; description: string; fixture: Fixture | null; error?: string };
+    this.lastStatus = {
+      source: envelope.source,
+      label: envelope.label,
+      description: envelope.description,
+      reliableForPredictions: envelope.source !== 'unavailable',
+    };
+
+    if (!response.ok) {
+      throw new Error(envelope.error ?? this.lastStatus.description);
+    }
+
+    return { status: this.lastStatus, fixture: envelope.fixture, error: envelope.error };
   }
 
   async refresh() {
-    this.fixtures = createDemoFixtures();
+    await fetch('/api/football/refresh', { method: 'POST', headers: { Accept: 'application/json' } });
   }
 }
 
-// Replace this factory with a live or cached provider once the user approves
-// a football data source. Keeping the contract stable prevents UI changes from
-// being coupled to a particular API response shape.
 export function createFootballDataProvider(): FootballDataProvider {
-  return new DemoFootballDataProvider();
+  return new FootballApiDataProvider();
 }
 
 export function formatFixtureDate(dateTime: string) {
@@ -250,10 +231,20 @@ export function formatRelativeKickoff(dateTime: string) {
   const kickoff = new Date(dateTime);
   if (kickoff.getTime() <= Date.now()) return 'started';
 
-  const today = getDoualaDateParts(new Date());
-  const matchday = getDoualaDateParts(kickoff);
-  const todayUtc = Date.UTC(today.year, today.month - 1, today.day);
-  const matchdayUtc = Date.UTC(matchday.year, matchday.month - 1, matchday.day);
+  const today = new Intl.DateTimeFormat('en-CA', {
+    timeZone: FOOTBALL_DATA_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
+  const matchday = new Intl.DateTimeFormat('en-CA', {
+    timeZone: FOOTBALL_DATA_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(kickoff);
+  const todayUtc = Date.parse(`${today}T00:00:00Z`);
+  const matchdayUtc = Date.parse(`${matchday}T00:00:00Z`);
   const daysUntilKickoff = Math.round((matchdayUtc - todayUtc) / (24 * 60 * 60 * 1000));
 
   if (daysUntilKickoff === 0) return 'today';
@@ -269,4 +260,8 @@ export function formatModelUpdated(date: Date) {
     hour12: false,
     timeZoneName: 'short',
   }).format(date);
+}
+
+export function normalizeFixtureSearch(value: string) {
+  return normalizeSearchTerm(value);
 }

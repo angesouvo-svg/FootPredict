@@ -579,6 +579,9 @@
   color: hsl(var(--foreground));
   font-size: 13px;
 }
+.sidebar-empty span {
+  display: block;
+}
 .detail-panel {
   min-width: 0;
   animation: rise-in 500ms 150ms ease both;
@@ -872,11 +875,19 @@
 }
 .probability-fill.teal { background: hsl(var(--chart-2)); }
 .probability-fill.muted { background: hsl(var(--muted-foreground)); }
+.probability-fill.unavailable {
+  background: hsl(var(--border));
+}
 .probability-number {
   color: hsl(var(--foreground));
   font-family: var(--app-font-mono);
   font-size: 12px;
   text-align: right;
+}
+.unavailable-inline {
+  color: hsl(var(--muted-foreground));
+  font-family: var(--app-font-mono);
+  font-size: 10px;
 }
 .two-column {
   display: grid;
@@ -899,6 +910,58 @@
 .data-unavailable strong {
   color: hsl(var(--foreground));
   font-size: 12px;
+}
+.stat-list,
+.standing-list,
+.h2h-list {
+  display: grid;
+  gap: 0;
+}
+.stat-list > div,
+.standing-list > div,
+.h2h-list > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 15px;
+  padding: 10px 0;
+  border-bottom: 1px solid hsl(var(--border));
+}
+.stat-list > div:first-child,
+.standing-list > div:first-child,
+.h2h-list > div:first-child {
+  padding-top: 0;
+}
+.stat-list > div:last-child,
+.standing-list > div:last-child,
+.h2h-list > div:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+.stat-list span,
+.standing-list span,
+.h2h-list span {
+  color: hsl(var(--muted-foreground));
+  font-size: 11px;
+}
+.stat-list strong,
+.standing-list strong,
+.h2h-list strong {
+  color: hsl(var(--foreground));
+  font-family: var(--app-font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  text-align: right;
+}
+.stat-list small {
+  color: hsl(var(--muted-foreground));
+  font-family: var(--app-font-sans);
+  font-size: 10px;
+  font-weight: 400;
+}
+.h2h-list strong {
+  max-width: 72%;
+  line-height: 1.4;
 }
 .goals-signals-card {
   margin-top: 13px;
@@ -1073,6 +1136,14 @@
   letter-spacing: 0.12em;
   text-transform: uppercase;
 }
+.prediction-overline {
+  margin: 0 0 7px;
+  color: hsl(var(--primary));
+  font-family: var(--app-font-mono);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
 .prediction-marker {
   width: 7px;
   height: 7px;
@@ -1127,6 +1198,57 @@
   font-family: var(--app-font-mono);
   font-size: 9px;
   line-height: 1.45;
+}
+.secondary-markets {
+  display: grid;
+  gap: 10px;
+  margin-top: 19px;
+}
+.secondary-markets > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.market-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 10px;
+  border: 1px solid hsl(var(--border));
+  border-radius: 8px;
+  color: hsl(var(--secondary-foreground));
+  background: hsl(var(--secondary) / 0.65);
+  font-size: 11px;
+}
+.market-chip strong {
+  color: hsl(var(--chart-2));
+  font-family: var(--app-font-mono);
+  font-size: 10px;
+}
+.transparency-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 13px;
+  padding: 13px 15px;
+  border: 1px solid hsl(var(--border));
+  border-radius: 11px;
+  color: hsl(var(--muted-foreground));
+  background: hsl(var(--secondary) / 0.28);
+  font-size: 11px;
+  line-height: 1.5;
+}
+.transparency-note strong {
+  flex: 0 0 auto;
+  color: hsl(var(--foreground));
+  font-family: var(--app-font-mono);
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.compact-empty {
+  min-height: 170px;
+  margin-top: 13px;
 }
 .empty-state {
   display: grid;

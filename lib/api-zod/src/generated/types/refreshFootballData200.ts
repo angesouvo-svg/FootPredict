@@ -6,6 +6,6 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface HealthStatus {
+export type RefreshFootballData200 = {
   status: string;
-}
+};

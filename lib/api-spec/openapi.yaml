@@ -10,6 +10,8 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: football
+    description: Current football fixtures and analysis
 paths:
   /healthz:
     get:
@@ -24,6 +26,70 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /football/fixtures:
+    get:
+      operationId: listFootballFixtures
+      tags: [football]
+      summary: List current football fixtures
+      parameters:
+        - name: query
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: league
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [All, Premier League, La Liga, Champions League, Bundesliga, Serie A, Ligue 1]
+      responses:
+        "200":
+          description: Current fixture list and provider status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FootballFixturesResponse"
+  /football/fixtures/{id}:
+    get:
+      operationId: getFootballFixtureAnalysis
+      tags: [football]
+      summary: Get detailed pre-match analysis
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Detailed fixture analysis
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FootballFixtureAnalysisResponse"
+        "404":
+          description: Fixture not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FootballFixtureAnalysisResponse"
+  /football/refresh:
+    post:
+      operationId: refreshFootballData
+      tags: [football]
+      summary: Clear football data cache
+      responses:
+        "200":
+          description: Cache cleared
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                required: [status]
 components:
   schemas:
     HealthStatus:
@@ -33,4 +99,65 @@ components:
           type: string
       required:
         - status
+    FootballFixturesResponse:
+      type: object
+      properties:
+        source:
+          type: string
+          enum: [live, cached, unavailable]
+        label:
+          type: string
+        description:
+          type: string
+        lastUpdated:
+          type: ["string", "null"]
+        fixtures:
+          type: array
+          items:
+            $ref: "#/components/schemas/FootballFixture"
+        error:
+          type: ["string", "null"]
+      required: [source, label, description, lastUpdated, fixtures]
+    FootballFixtureAnalysisResponse:
+      allOf:
+        - $ref: "#/components/schemas/FootballFixturesResponse"
+        - type: object
+          properties:
+            fixture:
+              anyOf:
+                - $ref: "#/components/schemas/FootballFixture"
+                - type: "null"
+          required: [fixture]
+    FootballFixture:
+      type: object
+      additionalProperties: true
+      properties:
+        id:
+          type: string
+        league:
+          type: string
+        dateTime:
+          type: string
+        status:
+          type: string
+        home:
+          type: string
+        away:
+          type: string
+        homeCode:
+          type: string
+        awayCode:
+          type: string
+        homeTeamId:
+          type: integer
+        awayTeamId:
+          type: integer
+        competitionCode:
+          type: string
+        analysis:
+          anyOf:
+            - type: object
+              additionalProperties: true
+            - type: "null"
+      required: [id, league, dateTime, status, home, away, homeCode, awayCode, homeTeamId, awayTeamId, competitionCode, analysis]
 
