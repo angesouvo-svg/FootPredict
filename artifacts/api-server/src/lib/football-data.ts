@@ -119,6 +119,7 @@ const competitions: Array<{ code: string; league: Exclude<League, "All"> }> = [
   { code: "FL1", league: "Ligue 1" },
   { code: "CL", league: "Champions League" },
 ];
+const fixtureStatuses = new Set(["SCHEDULED", "TIMED", "LIVE", "IN_PLAY", "PAUSED"]);
 
 const responseCache = new Map<string, { expiresAt: number; value: unknown }>();
 let fixturesCache: { expiresAt: number; fixtures: Fixture[]; lastUpdated: string } | null = null;
@@ -200,6 +201,7 @@ async function fetchApi<T>(path: string, ttlMs = DETAIL_CACHE_TTL_MS): Promise<T
   const cached = responseCache.get(path);
   if (cached && cached.expiresAt > Date.now()) return cached.value as T;
 
+  logger.info({ provider: "football-data.org", configured: true, path }, "Football provider request");
   const response = await fetch(`${API_BASE_URL}${path}`, {
     headers: { "X-Auth-Token": apiKey, Accept: "application/json" },
     signal: AbortSignal.timeout(12_000),
@@ -220,17 +222,42 @@ async function loadFixtures() {
   }
 
   const today = new Date();
-  const query = new URLSearchParams({
-    competitions: competitions.map((item) => item.code).join(","),
-    dateFrom: dateInDouala(today),
-    dateTo: dateOffset(today, FIXTURE_WINDOW_DAYS),
-    status: "SCHEDULED,IN_PLAY,PAUSED",
-    limit: "100",
-  });
+  const dateFrom = dateInDouala(today);
+  const dateTo = dateOffset(today, FIXTURE_WINDOW_DAYS);
+  logger.info({
+    provider: "football-data.org",
+    nowIso: today.toISOString(),
+    timeZone: TIME_ZONE,
+    dateFrom,
+    dateTo,
+    competitionCodes: competitions.map((item) => item.code),
+    retrieval: "competition subresources",
+  }, "Loading current football fixtures");
 
   try {
-    const payload = await fetchApi<RawMatchesResponse>(`/matches?${query.toString()}`, CACHE_TTL_MS);
-    const fixtures = (payload.matches ?? []).flatMap((match) => {
+    const responses = await Promise.allSettled(competitions.map(async (competition) => {
+      const query = new URLSearchParams({ dateFrom, dateTo, limit: "100" });
+      const payload = await fetchApi<RawMatchesResponse>(`/competitions/${competition.code}/matches?${query.toString()}`, CACHE_TTL_MS);
+      return { competition, matches: payload.matches ?? [] };
+    }));
+    const successfulResponses = responses.flatMap((result) => result.status === "fulfilled" ? [result.value] : []);
+    const failedCompetitions = responses.flatMap((result, index) => result.status === "rejected" ? [competitions[index].code] : []);
+    if (successfulResponses.length === 0) {
+      throw new Error("football-data.org returned no accessible competition feeds");
+    }
+    const rawMatches = successfulResponses.flatMap((result) => result.matches);
+    logger.info({
+      provider: "football-data.org",
+      dateFrom,
+      dateTo,
+      returnedMatches: rawMatches.length,
+      returnedCompetitionCodes: [...new Set(rawMatches.map((match) => match.competition?.code).filter(Boolean))],
+      failedCompetitions,
+      sampleDates: rawMatches.slice(0, 5).map((match) => match.utcDate).filter(Boolean),
+    }, "Football fixture response received");
+    const fixtures = rawMatches.flatMap((match) => {
+      const matchDate = match.utcDate ? dateInDouala(new Date(match.utcDate)) : null;
+      if (!matchDate || matchDate < dateFrom || matchDate > dateTo || !fixtureStatuses.has(match.status ?? "")) return [];
       const fixture = toFixture(match);
       return fixture ? [fixture] : [];
     }).sort((a, b) => a.dateTime.localeCompare(b.dateTime));
