@@ -1,0 +1,1 @@
+- [Football provider constraints](football-provider-constraints.md) — keep current-fixture queries within the provider’s 10-day limit and documented statuses.

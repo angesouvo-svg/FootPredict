@@ -4,6 +4,7 @@ const API_BASE_URL = "https://api.football-data.org/v4";
 const CACHE_TTL_MS = 5 * 60 * 1000;
 const DETAIL_CACHE_TTL_MS = 10 * 60 * 1000;
 const TIME_ZONE = "Africa/Douala";
+const FIXTURE_WINDOW_DAYS = 9;
 
 export type DataSource = "live" | "cached" | "unavailable";
 export type League = "All" | "Premier League" | "La Liga" | "Champions League" | "Bundesliga" | "Serie A" | "Ligue 1";
@@ -204,6 +205,8 @@ async function fetchApi<T>(path: string, ttlMs = DETAIL_CACHE_TTL_MS): Promise<T
     signal: AbortSignal.timeout(12_000),
   });
   if (!response.ok) {
+    const body = await response.text();
+    logger.warn({ status: response.status, path, body: body.slice(0, 500) }, "Football provider returned an error");
     throw new Error(`football-data.org returned ${response.status}`);
   }
   const value = (await response.json()) as T;
@@ -220,9 +223,9 @@ async function loadFixtures() {
   const query = new URLSearchParams({
     competitions: competitions.map((item) => item.code).join(","),
     dateFrom: dateInDouala(today),
-    dateTo: dateOffset(today, 14),
-    status: "SCHEDULED,TIMED,IN_PLAY,PAUSED",
-    limit: "500",
+    dateTo: dateOffset(today, FIXTURE_WINDOW_DAYS),
+    status: "SCHEDULED,IN_PLAY,PAUSED",
+    limit: "100",
   });
 
   try {
