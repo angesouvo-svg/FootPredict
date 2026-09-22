@@ -236,7 +236,7 @@ async function loadFixtures() {
 
   try {
     const responses = await Promise.allSettled(competitions.map(async (competition) => {
-      const query = new URLSearchParams({ dateFrom, dateTo, limit: "100" });
+      const query = new URLSearchParams({ limit: "100" });
       const payload = await fetchApi<RawMatchesResponse>(`/competitions/${competition.code}/matches?${query.toString()}`, CACHE_TTL_MS);
       return { competition, matches: payload.matches ?? [] };
     }));
@@ -246,6 +246,12 @@ async function loadFixtures() {
       throw new Error("football-data.org returned no accessible competition feeds");
     }
     const rawMatches = successfulResponses.flatMap((result) => result.matches);
+    const rawDates = rawMatches.flatMap((match) => match.utcDate ? [dateInDouala(new Date(match.utcDate))] : []);
+    const rawStatusCounts = rawMatches.reduce<Record<string, number>>((counts, match) => {
+      const matchStatus = match.status ?? "UNKNOWN";
+      counts[matchStatus] = (counts[matchStatus] ?? 0) + 1;
+      return counts;
+    }, {});
     logger.info({
       provider: "football-data.org",
       dateFrom,
@@ -254,13 +260,40 @@ async function loadFixtures() {
       returnedCompetitionCodes: [...new Set(rawMatches.map((match) => match.competition?.code).filter(Boolean))],
       failedCompetitions,
       sampleDates: rawMatches.slice(0, 5).map((match) => match.utcDate).filter(Boolean),
+      localDateRange: rawDates.length ? { first: rawDates.sort()[0], last: rawDates.sort().at(-1) } : null,
+      rawStatusCounts,
     }, "Football fixture response received");
-    const fixtures = rawMatches.flatMap((match) => {
+    const inWindowMatches = rawMatches.filter((match) => {
       const matchDate = match.utcDate ? dateInDouala(new Date(match.utcDate)) : null;
-      if (!matchDate || matchDate < dateFrom || matchDate > dateTo || !fixtureStatuses.has(match.status ?? "")) return [];
+      return Boolean(matchDate && matchDate >= dateFrom && matchDate <= dateTo && fixtureStatuses.has(match.status ?? ""));
+    });
+    logger.info({
+      provider: "football-data.org",
+      dateFrom,
+      dateTo,
+      inWindowMatches: inWindowMatches.length,
+      sampleInWindow: inWindowMatches.slice(0, 5).map((match) => ({
+        id: match.id,
+        utcDate: match.utcDate,
+        localDate: match.utcDate ? dateInDouala(new Date(match.utcDate)) : null,
+        status: match.status,
+        competitionCode: match.competition?.code,
+        homeTeamId: match.homeTeam?.id,
+        awayTeamId: match.awayTeam?.id,
+        home: match.homeTeam?.name,
+        away: match.awayTeam?.name,
+      })),
+    }, "Current football match candidates");
+    const fixtures = inWindowMatches.flatMap((match) => {
       const fixture = toFixture(match);
       return fixture ? [fixture] : [];
     }).sort((a, b) => a.dateTime.localeCompare(b.dateTime));
+    logger.info({
+      provider: "football-data.org",
+      dateFrom,
+      dateTo,
+      filteredFixtures: fixtures.length,
+    }, "Current football fixtures filtered");
     const lastUpdated = new Date().toISOString();
     fixturesCache = { expiresAt: Date.now() + CACHE_TTL_MS, fixtures, lastUpdated };
     lastGoodFixtures = { fixtures, lastUpdated };
